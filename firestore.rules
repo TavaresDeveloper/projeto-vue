@@ -1,0 +1,22 @@
+// firestore.rules
+// ─────────────────────────────────────────────────────────────
+// Regras básicas para desenvolvimento.
+// Em produção, adicione autenticação (Firebase Auth) antes de
+// restringir read/write por usuário.
+// ─────────────────────────────────────────────────────────────
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Produtos — qualquer leitura/escrita (ajuste em produção)
+    match /produtos/{produtoId} {
+      allow read, write: if true;
+    }
+
+    // Movimentações — somente leitura e criação (sem editar/excluir)
+    match /movimentos/{movId} {
+      allow read, create: if true;
+      allow update, delete: if false;
+    }
+  }
+}
