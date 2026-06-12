@@ -1,19 +1,33 @@
 <template>
   <div class="menuLogin">
-    <h1>Faça seu cadastro</h1>
-    <div class="cadastro">
-      <div class="input">
-        <label for="email">Email:</label>
-        <input id="email" type="email" v-model="form.email" />
+    <div class="loginCard">
+      <h1>{{ isRegister ? 'Criar conta' : 'Entrar no sistema' }}</h1>
+      <p class="subtitle">
+        {{ isRegister ? 'Abra sua conta com email e senha.' : 'Acesse o painel usando seu email e senha.' }}
+      </p>
+
+      <div class="inputGroup">
+        <label for="email">Email</label>
+        <input id="email" type="email" v-model="form.email" autocomplete="username" />
       </div>
-      <div class="input">
-        <label for="senha">Senha:</label>
-        <input id="senha" type="password" v-model="form.senha" />
+
+      <div class="inputGroup">
+        <label for="senha">Senha</label>
+        <input id="senha" type="password" v-model="form.senha" autocomplete="current-password" />
       </div>
-      <p v-if="erro" style="color:red; font-size:13px;">{{ erro }}</p>
-      <button @click="handleLogin" :disabled="isLoading">
-        {{ isLoading ? 'Aguarde...' : 'Cadastrar' }}
+
+      <p v-if="erro" class="erro">{{ erro }}</p>
+
+      <button @click="handleSubmit" :disabled="isLoading">
+        {{ isLoading ? 'Aguarde...' : (isRegister ? 'Cadastrar' : 'Entrar') }}
       </button>
+
+      <p class="footerText">
+        {{ isRegister ? 'Já tem conta?' : 'Ainda não tem conta?' }}
+        <button type="button" class="linkButton" @click="toggleRegister">
+          {{ isRegister ? 'Entrar' : 'Cadastrar' }}
+        </button>
+      </p>
     </div>
   </div>
 </template>
@@ -22,16 +36,22 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { auth } from '@/firebase.js'
-import { createUserWithEmailAndPassword } from 'firebase/auth'
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'
 
 const router = useRouter()
 const form = ref({ email: '', senha: '' })
 const isLoading = ref(false)
 const erro = ref('')
+const isRegister = ref(false)
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-function handleLogin() {
+function toggleRegister() {
+  isRegister.value = !isRegister.value
+  erro.value = ''
+}
+
+function handleSubmit() {
   erro.value = ''
   if (!emailRegex.test(form.value.email)) {
     erro.value = 'Por favor, insira um email válido.'
@@ -43,10 +63,12 @@ function handleLogin() {
   }
 
   isLoading.value = true
-  createUserWithEmailAndPassword(auth, form.value.email, form.value.senha)
-    .then(() => {
-      router.push('/estoque')
-    })
+  const action = isRegister.value
+    ? createUserWithEmailAndPassword(auth, form.value.email, form.value.senha)
+    : signInWithEmailAndPassword(auth, form.value.email, form.value.senha)
+
+  action
+    .then(() => router.push('/estoque'))
     .catch((error) => {
       if (error.code === 'auth/email-already-in-use') {
         erro.value = 'Este email já está cadastrado.'
@@ -54,8 +76,10 @@ function handleLogin() {
         erro.value = 'Por favor, insira um email válido.'
       } else if (error.code === 'auth/weak-password') {
         erro.value = 'A senha deve ter pelo menos 6 caracteres.'
+      } else if (error.code === 'auth/wrong-password' || error.code === 'auth/user-not-found') {
+        erro.value = 'Email ou senha inválidos.'
       } else {
-        erro.value = 'Não foi possível cadastrar. ' + (error.message || '')
+        erro.value = 'Não foi possível processar. ' + (error.message || '')
       }
     })
     .finally(() => {
@@ -70,47 +94,59 @@ function handleLogin() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: radial-gradient(circle at top, #eef7ee 0%, #dfe9dd 100%);
-  padding: 1.5rem;
+  background: #eef7ee;
+  padding: 1rem;
 }
-.cadastro {
+.loginCard {
   width: min(420px, 100%);
-  display: grid;
-  gap: 18px;
   background: #fff;
-  padding: 2.2rem 2rem;
-  border-radius: 24px;
-  box-shadow: 0 18px 32px rgba(15, 40, 19, 0.12);
+  padding: 2rem 1.8rem;
+  border-radius: 20px;
+  box-shadow: 0 20px 45px rgba(15, 40, 19, 0.08);
+  display: grid;
+  gap: 1rem;
 }
-.cadastro h1 {
+.loginCard h1 {
   margin: 0;
-  color: #16482e;
   font-size: 1.8rem;
+  color: #1e3a27;
 }
-.input {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.input label {
+.subtitle {
+  margin: 0;
+  color: #5c6b5b;
   font-size: 0.95rem;
-  color: #4b6b55;
 }
-.input input {
+.inputGroup {
+  display: grid;
+  gap: 0.5rem;
+}
+.inputGroup label {
+  font-size: 0.95rem;
+  color: #4c5a4c;
+}
+.inputGroup input {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid #cfd9cf;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid #d3dbd3;
   font-size: 1rem;
+}
+.erro {
+  margin: 0;
+  color: #bf2d2d;
+  font-size: 0.92rem;
 }
 button {
   border: none;
   background: #1d6d37;
   color: #fff;
-  padding: 12px 16px;
-  border-radius: 10px;
+  padding: 13px 16px;
+  border-radius: 12px;
   font-size: 1rem;
   cursor: pointer;
 }
-button:disabled { opacity: 0.7; cursor: not-allowed; }
+button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
 </style>

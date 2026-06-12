@@ -8,6 +8,10 @@
         <h1 class="header-title">Mercadinho Pinheirão</h1>
         <p class="header-sub">Painel de vendas e controle de estoque</p>
       </div>
+      <div class="header-actions">
+        <span v-if="user">Usuário: {{ userEmail }}</span>
+        <button v-if="user" class="logout-button" @click="logout">Sair</button>
+      </div>
     </header>
 
     <!-- Métricas -->
@@ -117,8 +121,10 @@
 </template>
 
 <script setup>
-import { ref, onUnmounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { ref, onUnmounted, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { auth } from '@/firebase.js'
 import { useProdutos } from '@/composables/useProdutos'
 import { useMovimentos } from '@/composables/useMovimentos'
 import { useClientes } from '@/composables/useClientes'
@@ -130,8 +136,36 @@ import ViewHistorico from '@/components/ViewHistorico.vue'
 import ViewClientes from '@/components/ViewClientes.vue'
 
 const route = useRoute()
+const router = useRouter()
+const user = ref(null)
+const authReady = ref(false)
+
 const mostrarLogin = computed(() => route.path === '/')
-const mostrarApp = computed(() => route.path !== '/')
+const mostrarApp = computed(() => authReady.value && route.path !== '/' && !!user.value)
+
+onAuthStateChanged(auth, (currentUser) => {
+  user.value = currentUser
+  authReady.value = true
+
+  if (!currentUser && route.path !== '/') {
+    router.push('/')
+  }
+  if (currentUser && route.path === '/') {
+    router.push('/estoque')
+  }
+})
+
+watch(route, (to) => {
+  if (!authReady.value) return
+  if (!user.value && to.path !== '/') {
+    router.push('/')
+  }
+  if (user.value && to.path === '/') {
+    router.push('/estoque')
+  }
+})
+
+const userEmail = computed(() => user.value?.email || 'Deslogado')
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -237,6 +271,13 @@ const vendasSemana = computed(() => {
   const maxValor = Math.max(1, ...dias.map(d => d.valor))
   return dias.map(d => ({ label: d.label, valor: d.valor, pct: Math.round((d.valor / maxValor) * 100) }))
 })
+
+function logout() {
+  signOut(auth)
+    .then(() => {
+      router.push('/')
+    })
+}
 
 onUnmounted(() => { unsubProd(); unsubMovs(); unsubClientes() })
 
