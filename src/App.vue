@@ -1,10 +1,12 @@
 <template>
-  <div class="app">
+  <router-view v-if="mostrarLogin" />
+
+  <div class="app" v-if="mostrarApp">
     <!-- Header -->
     <header class="header">
       <div>
-        <h1 class="header-title">Mercadinho</h1>
-        <p class="header-sub">Controle de Estoque</p>
+        <h1 class="header-title">Mercadinho Pinheirão</h1>
+        <p class="header-sub">Painel de vendas e controle de estoque</p>
       </div>
     </header>
 
@@ -15,20 +17,16 @@
         <div class="metric-value">{{ totalProdutos }}</div>
       </div>
       <div class="metric">
-        <div class="metric-label">Total de itens</div>
-        <div class="metric-value">{{ totalItens.toLocaleString('pt-BR') }}</div>
+        <div class="metric-label">Clientes</div>
+        <div class="metric-value">{{ totalClientes }}</div>
       </div>
       <div class="metric">
-        <div class="metric-label">Valor em estoque</div>
-        <div class="metric-value metric-mono">{{ fmtMoeda(valorEstoque) }}</div>
+        <div class="metric-label">Vendas do mês</div>
+        <div class="metric-value metric-mono">{{ fmtMoeda(totalVendas) }}</div>
       </div>
       <div class="metric">
-        <div class="metric-label">Sem estoque</div>
-        <div class="metric-value" :class="{ danger: semEstoque > 0 }">{{ semEstoque }}</div>
-      </div>
-      <div class="metric">
-        <div class="metric-label">Estoque baixo</div>
-        <div class="metric-value" :class="{ warning: estoqueBaixo > 0 }">{{ estoqueBaixo }}</div>
+        <div class="metric-label">Ticket médio</div>
+        <div class="metric-value">{{ fmtMoeda(ticketMedio) }}</div>
       </div>
     </section>
 
@@ -56,6 +54,19 @@
 
     <!-- Conteúdo das tabs -->
     <main>
+      <ViewDashboard
+        v-if="tab === 'dashboard'"
+        :total-vendas="totalVendas"
+        :ticket-medio="ticketMedio"
+        :total-clientes="totalClientes"
+        :total-itens="totalItensVendidos"
+        :unique-produtos="uniqueProdutos"
+        :vendas-count="vendasCount"
+        :vendas-semana="vendasSemana"
+        :vendas-por-categoria="vendasPorCategoria"
+        :top-produtos="topProdutos"
+      />
+
       <ViewEstoque
         v-if="tab === 'estoque'"
         :produtos="produtos"
@@ -78,6 +89,7 @@
       <ViewMovimentacao
         v-if="tab === 'movimento'"
         :produtos="produtos"
+        :clientes="clientes"
         :registrar-movimento="registrarMovimento"
         :ajustar-quantidade="ajustarQuantidade"
       />
@@ -88,28 +100,51 @@
         :carregando="carregandoMovs"
         :fmt-hora="fmtHora"
       />
+
+      <ViewClientes
+        v-if="tab === 'clientes'"
+        :clientes="clientes"
+        :cliente-editando="clienteEditando"
+        :adicionar-cliente="adicionarCliente"
+        :atualizar-cliente="atualizarCliente"
+        :excluir-cliente="excluirCliente"
+        @editar="abrirEdicaoCliente"
+        @cancelar="cancelarEdicaoCliente"
+        @salvo="clienteEditando = null"
+      />
     </main>
   </div>
 </template>
 
 <script setup>
-import { ref, onUnmounted } from 'vue'
-import { useProdutos }    from '@/composables/useProdutos'
-import { useMovimentos }  from '@/composables/useMovimentos'
-import ViewEstoque        from '@/components/ViewEstoque.vue'
-import ViewCadastro       from '@/components/ViewCadastro.vue'
-import ViewMovimentacao   from '@/components/ViewMovimentacao.vue'
-import ViewHistorico      from '@/components/ViewHistorico.vue'
+import { ref, onUnmounted, computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { useProdutos } from '@/composables/useProdutos'
+import { useMovimentos } from '@/composables/useMovimentos'
+import { useClientes } from '@/composables/useClientes'
+import ViewDashboard from '@/components/ViewDashboard.vue'
+import ViewEstoque from '@/components/ViewEstoque.vue'
+import ViewCadastro from '@/components/ViewCadastro.vue'
+import ViewMovimentacao from '@/components/ViewMovimentacao.vue'
+import ViewHistorico from '@/components/ViewHistorico.vue'
+import ViewClientes from '@/components/ViewClientes.vue'
+
+const route = useRoute()
+const mostrarLogin = computed(() => route.path === '/')
+const mostrarApp = computed(() => route.path !== '/')
 
 const TABS = [
-  { id: 'estoque',    label: 'Estoque'       },
-  { id: 'cadastro',   label: 'Cadastrar'     },
-  { id: 'movimento',  label: 'Movimentação'  },
-  { id: 'historico',  label: 'Histórico'     }
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'estoque', label: 'Estoque' },
+  { id: 'cadastro', label: 'Produtos' },
+  { id: 'movimento', label: 'Movimentação' },
+  { id: 'historico', label: 'Histórico' },
+  { id: 'clientes', label: 'Clientes' }
 ]
 
-const tab             = ref('estoque')
+const tab = ref('dashboard')
 const produtoEditando = ref(null)
+const clienteEditando = ref(null)
 
 const {
   produtos, carregando: carregandoProdutos,
@@ -125,10 +160,89 @@ const {
   unsub: unsubMovs
 } = useMovimentos()
 
-onUnmounted(() => { unsubProd(); unsubMovs() })
+const {
+  clientes, carregando: carregandoClientes,
+  totalClientes, adicionarCliente, atualizarCliente, excluirCliente,
+  unsub: unsubClientes
+} = useClientes()
+
+function getVendaValor(m) {
+  const precoVenda = m.valor ?? m.preco ?? produtos.value.find(p => p.id === m.prodId)?.preco ?? 0
+  return precoVenda * (m.qty ?? 0)
+}
+
+const vendasMensais = computed(() => {
+  const hoje = new Date()
+  const mes = hoje.getMonth()
+  const ano = hoje.getFullYear()
+
+  return movimentos.value.filter(m => {
+    if (!m.ts) return false
+    return m.tipo === 'saida' && m.ts.getMonth() === mes && m.ts.getFullYear() === ano
+  })
+})
+
+const totalVendas = computed(() => vendasMensais.value.reduce((acc, m) => acc + getVendaValor(m), 0))
+const vendasCount = computed(() => vendasMensais.value.length)
+const totalItensVendidos = computed(() => vendasMensais.value.reduce((acc, m) => acc + (m.qty ?? 0), 0))
+const ticketMedio = computed(() => vendasCount.value ? totalVendas.value / vendasCount.value : 0)
+const uniqueProdutos = computed(() => new Set(vendasMensais.value.map(m => m.prodId)).size)
+
+const vendasPorCategoria = computed(() => {
+  const mapa = {}
+  vendasMensais.value.forEach(m => {
+    const produto = produtos.value.find(p => p.id === m.prodId)
+    const categoria = produto?.cat || 'Outros'
+    mapa[categoria] = (mapa[categoria] || 0) + getVendaValor(m)
+  })
+  return Object.entries(mapa)
+    .map(([categoria, valor]) => ({ categoria, valor }))
+    .sort((a, b) => b.valor - a.valor)
+    .slice(0, 5)
+})
+
+const topProdutos = computed(() => {
+  const mapa = {}
+  vendasMensais.value.forEach(m => {
+    mapa[m.prodId] = (mapa[m.prodId] || 0) + (m.qty ?? 0)
+  })
+  return Object.entries(mapa)
+    .map(([prodId, qtd]) => {
+      const produto = produtos.value.find(p => p.id === prodId)
+      return { nome: produto?.nome ?? 'Desconhecido', qtd }
+    })
+    .sort((a, b) => b.qtd - a.qtd)
+    .slice(0, 5)
+})
+
+const vendasSemana = computed(() => {
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  const dias = Array.from({ length: 7 }, (_, index) => {
+    const dia = new Date(hoje)
+    dia.setDate(hoje.getDate() - 6 + index)
+    return {
+      label: new Intl.DateTimeFormat('pt-BR', { weekday: 'short' }).format(dia),
+      date: dia,
+      valor: 0
+    }
+  })
+
+  const mapa = new Map(dias.map(d => [d.date.toDateString(), d]))
+  vendasMensais.value.forEach(m => {
+    const item = mapa.get(m.ts.toDateString())
+    if (item) item.valor += getVendaValor(m)
+  })
+
+  const maxValor = Math.max(1, ...dias.map(d => d.valor))
+  return dias.map(d => ({ label: d.label, valor: d.valor, pct: Math.round((d.valor / maxValor) * 100) }))
+})
+
+onUnmounted(() => { unsubProd(); unsubMovs(); unsubClientes() })
 
 function mudarTab(id) {
   if (id !== 'cadastro') produtoEditando.value = null
+  if (id !== 'clientes') clienteEditando.value = null
   tab.value = id
 }
 
@@ -137,9 +251,18 @@ function abrirEdicao(produto) {
   tab.value = 'cadastro'
 }
 
+function abrirEdicaoCliente(cliente) {
+  clienteEditando.value = cliente
+  tab.value = 'clientes'
+}
+
 function cancelarEdicao() {
   produtoEditando.value = null
   tab.value = 'estoque'
+}
+
+function cancelarEdicaoCliente() {
+  clienteEditando.value = null
 }
 
 function fmtMoeda(v) {
@@ -152,22 +275,24 @@ function fmtMoeda(v) {
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --brand:       #1a7a4a;
-  --brand-light: #e6f4ec;
-  --brand-text:  #0f5233;
+  --brand:       #1d6d37;
+  --brand-strong:#0f4a2d;
+  --brand-light: #e8f5e9;
+  --brand-text:  #143d2f;
+  --brand-accent: #e0b234;
   --radius-sm:   6px;
-  --radius-md:   8px;
-  --radius-lg:   12px;
+  --radius-md:   9px;
+  --radius-lg:   16px;
   font-family: 'Segoe UI', system-ui, sans-serif;
   font-size: 15px;
-  color: #1a1a18;
-  background: #f5f4f0;
+  color: #1d3224;
+  background: radial-gradient(circle at top, #f7fbf5 0%, #edf6ee 55%, #e0e8db 100%);
 }
 
-body { background: #f5f4f0; min-height: 100vh; }
+body { background: radial-gradient(circle at top, #f7fbf5 0%, #edf6ee 55%, #e0e8db 100%); min-height: 100vh; }
 
 /* ── Layout ─────────────────────────────────────────── */
-.app { max-width: 900px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+.app { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1.2rem 3rem; }
 
 /* ── Header ─────────────────────────────────────────── */
 .header { margin-bottom: 1.5rem; }

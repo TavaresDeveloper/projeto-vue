@@ -13,6 +13,13 @@
         </select>
       </div>
       <div class="form-group">
+        <label>Cliente</label>
+        <select v-model="form.clienteId" class="input">
+          <option value="">Sem cliente</option>
+          <option v-for="c in clientes" :key="c.id" :value="c.id">{{ c.nome }}</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label>Tipo</label>
         <select v-model="form.tipo" class="input">
           <option value="entrada">Entrada (reposição)</option>
@@ -44,25 +51,28 @@ import { ref } from 'vue'
 
 const props = defineProps({
   produtos:            { type: Array,    default: () => [] },
+  clientes:            { type: Array,    default: () => [] },
   registrarMovimento:  { type: Function, required: true },
   ajustarQuantidade:   { type: Function, required: true }
 })
 
 const salvando = ref(false)
 const erro     = ref('')
-const form     = ref({ prodId: '', tipo: 'entrada', qty: '', obs: '' })
+const form     = ref({ prodId: '', clienteId: '', tipo: 'entrada', qty: '', obs: '' })
 
 async function registrar() {
   erro.value = ''
-  if (!form.value.prodId)                             { erro.value = 'Selecione o produto.';                    return }
-  if (!form.value.qty || +form.value.qty <= 0)        { erro.value = 'Quantidade deve ser maior que zero.';     return }
+  if (!form.value.prodId)                              { erro.value = 'Selecione o produto.';                      return }
+  if (!form.value.qty || +form.value.qty <= 0)         { erro.value = 'Quantidade deve ser maior que zero.';       return }
 
   const produto = props.produtos.find(p => p.id === form.value.prodId)
-  if (!produto)                                        { erro.value = 'Produto não encontrado.';                return }
+  if (!produto)                                         { erro.value = 'Produto não encontrado.';                 return }
   if (form.value.tipo === 'saida' && +form.value.qty > produto.qtd) {
     erro.value = `Só há ${produto.qtd} unidades em estoque.`
     return
   }
+
+  const cliente = props.clientes.find(c => c.id === form.value.clienteId)
 
   salvando.value = true
   try {
@@ -72,16 +82,19 @@ async function registrar() {
 
     await Promise.all([
       props.registrarMovimento({
-        tipo:      form.value.tipo,
-        prodId:    produto.id,
-        prodNome:  produto.nome,
-        qty:       +form.value.qty,
-        obs:       form.value.obs
+        tipo:        form.value.tipo,
+        prodId:      produto.id,
+        prodNome:    produto.nome,
+        qty:         +form.value.qty,
+        obs:         form.value.obs,
+        clienteId:   cliente?.id,
+        clienteNome: cliente?.nome,
+        preco:       produto.preco
       }),
       props.ajustarQuantidade(produto.id, novaQtd)
     ])
 
-    form.value = { prodId: '', tipo: 'entrada', qty: '', obs: '' }
+    form.value = { prodId: '', clienteId: '', tipo: 'entrada', qty: '', obs: '' }
   } catch (e) {
     erro.value = 'Erro ao registrar: ' + e.message
   } finally {

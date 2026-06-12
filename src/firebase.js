@@ -8,18 +8,18 @@ import { getFirestore } from "firebase/firestore";
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
-  apiKey: "AIzaSyCDV3SVkS4EKVz4sEXonUsT0WZGqO87FHo",
-  authDomain: "controle-de-estoque-69e9d.firebaseapp.com",
-  projectId: "controle-de-estoque-69e9d",
-  storageBucket: "controle-de-estoque-69e9d.firebasestorage.app",
-  messagingSenderId: "183765733201",
-  appId: "1:183765733201:web:03c356bfe2c7904e1a4d70",
-  measurementId: "G-EP61GFH96H"
+  apiKey: "AIzaSyAunBtuCNJagSqlrcCF2hxdsKuiwg3p0VU",
+  authDomain: "mercadinho-estoque-6391b.firebaseapp.com",
+  projectId: "mercadinho-estoque-6391b",
+  storageBucket: "mercadinho-estoque-6391b.firebasestorage.app",
+  messagingSenderId: "914706797765",
+  appId: "1:914706797765:web:2d4a9f61e96f609c600cac",
+  measurementId: "G-5S7JHM9M6S"
 };
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
-const db = getFirestore(app);
+const db = getFirestore(app)
 
-export { db };
+export { db }

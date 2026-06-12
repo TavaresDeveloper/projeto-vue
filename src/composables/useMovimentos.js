@@ -22,12 +22,16 @@ export function useMovimentos() {
     }
   )
 
-  async function registrarMovimento({ tipo, prodId, prodNome, qty, obs }) {
+  async function registrarMovimento({ tipo, prodId, prodNome, qty, obs, clienteId, clienteNome, preco }) {
     await addDoc(collection(db, 'movimentos'), {
       tipo,
       prodId,
       prodNome,
       qty,
+      preco: preco ?? 0,
+      valor: (preco ?? 0) * (qty ?? 0),
+      clienteId: clienteId || '',
+      clienteNome: clienteNome || '',
       obs: obs || '',
       criadoEm: serverTimestamp()
     })
