@@ -21,6 +21,8 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { auth } from '@/firebase.js'
+import { createUserWithEmailAndPassword } from 'firebase/auth'
 
 const router = useRouter()
 const form = ref({ email: '', senha: '' })
@@ -39,11 +41,26 @@ function handleLogin() {
     erro.value = 'A senha deve ter pelo menos 6 caracteres.'
     return
   }
+
   isLoading.value = true
-  setTimeout(() => {
-    isLoading.value = false
-    router.push('/estoque')
-  }, 1000)
+  createUserWithEmailAndPassword(auth, form.value.email, form.value.senha)
+    .then(() => {
+      router.push('/estoque')
+    })
+    .catch((error) => {
+      if (error.code === 'auth/email-already-in-use') {
+        erro.value = 'Este email já está cadastrado.'
+      } else if (error.code === 'auth/invalid-email') {
+        erro.value = 'Por favor, insira um email válido.'
+      } else if (error.code === 'auth/weak-password') {
+        erro.value = 'A senha deve ter pelo menos 6 caracteres.'
+      } else {
+        erro.value = 'Não foi possível cadastrar. ' + (error.message || '')
+      }
+    })
+    .finally(() => {
+      isLoading.value = false
+    })
 }
 </script>
 
